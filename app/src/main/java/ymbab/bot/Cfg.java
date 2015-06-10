@@ -1,4 +1,4 @@
-package screen.dimmer.pixelfilter;
+package ymbab.bot;
 
 import android.content.Context;
 import android.util.Log;

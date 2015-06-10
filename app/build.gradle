@@ -5,8 +5,8 @@ android {
     buildToolsVersion "22.0.1"
 
     defaultConfig {
-        applicationId "screen.dimmer.pixelfilter"
-        minSdkVersion 16
+        applicationId "ymbab.bot"
+        minSdkVersion 21
         targetSdkVersion 22
         versionCode 1
         versionName "1.0"

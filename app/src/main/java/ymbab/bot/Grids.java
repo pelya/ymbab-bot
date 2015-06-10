@@ -1,4 +1,4 @@
-package screen.dimmer.pixelfilter;
+package ymbab.bot;
 
 public class Grids {
 

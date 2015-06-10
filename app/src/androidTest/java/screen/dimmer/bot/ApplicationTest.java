@@ -1,4 +1,4 @@
-package screen.dimmer.pixelfilter;
+package screen.dimmer.bot;
 
 import android.app.Application;
 import android.test.ApplicationTestCase;

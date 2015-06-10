@@ -1,12 +1,10 @@
-package screen.dimmer.pixelfilter;
+package ymbab.bot;
 
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.view.View;
 import android.widget.RemoteViews;
 
 public class OnOffWidget extends AppWidgetProvider {

@@ -14,7 +14,7 @@
             <Space
                 android:layout_width="20dp"
                 android:layout_height="20dp"
-                />
+                android:id="@+id/separator4" />
 
 
             <TextView
@@ -22,13 +22,13 @@
                 android:layout_height="wrap_content"
                 android:text="This is a bot to play the boat building game."
                 android:gravity="center"
-                android:id="@+id/textView3" />
+                />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:text="It will record your screen, and draw hints how to shift blocks."
+                android:text="Unfortunately, you do not have the boat-building game."
                 android:id="@+id/textView6" />
 
             <Space
@@ -39,9 +39,9 @@
             <Button
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Launch!"
-                android:id="@+id/launch"
-                android:onClick="onLaunch" />
+                android:text="Buy the game, it costs $3"
+                android:id="@+id/buy"
+                android:onClick="onBuy" />
 
         </LinearLayout>
 
