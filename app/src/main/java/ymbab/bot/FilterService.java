@@ -81,7 +81,6 @@ public class FilterService extends Service  {
         instance = this;
 
         Log.d(LOG, "Service started");
-        Cfg.Init(this);
 
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
