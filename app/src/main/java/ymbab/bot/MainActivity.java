@@ -5,12 +5,14 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.PixelFormat;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
+import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
@@ -52,11 +54,11 @@ public class MainActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-
         if (!isAppInstalled(this, ymbab)) {
             setContentView(R.layout.activity_no_game);
             return;
         }
+
         setContentView(R.layout.activity_main);
     }
 
@@ -125,36 +127,11 @@ public class MainActivity extends Activity {
                 return;
             }
             Log.i(LOG, "Starting screen capture");
-            setContentView(R.layout.screen_capture);
 
-            final android.os.Handler handler = new android.os.Handler();
-            handler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    runOnUiThread(new Runnable() {
-                        public void run() {
-                            SurfaceView surfaceView = (SurfaceView) findViewById(R.id.surfaceView);
+            FilterService.instance.initFromActivity(resultCode, resultData);
+            openApp(MainActivity.this, ymbab);
 
-                            MediaProjectionManager mediaProjectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-
-                            WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
-                            DisplayMetrics metrics = new DisplayMetrics();
-                            windowManager.getDefaultDisplay().getMetrics(metrics);
-                            Log.i(LOG, "Starting screen capture: width " + surfaceView.getWidth() + " height " + surfaceView.getHeight() + " density " + metrics.densityDpi);
-
-                            MediaProjection mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, resultData);
-                            VirtualDisplay virtualDisplay = mediaProjection.createVirtualDisplay("ScreenCapture",
-                                    surfaceView.getWidth(), surfaceView.getHeight(), metrics.densityDpi,
-                                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                                    surfaceView.getHolder().getSurface(), null, null);
-
-                            FilterService.instance.initFromActivity(mediaProjection, virtualDisplay, surfaceView);
-                            openApp(MainActivity.this, ymbab);
-                        }
-                    });
-                }
-            }, 500);
+            finish();
         }
     }
-
 }

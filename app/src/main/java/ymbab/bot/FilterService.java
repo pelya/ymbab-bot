@@ -11,6 +11,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.Shader;
 import android.graphics.drawable.BitmapDrawable;
 import android.hardware.Sensor;
@@ -19,10 +20,13 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
+import android.media.Image;
+import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Surface;
@@ -46,22 +50,12 @@ public class FilterService extends Service  {
     private boolean intentProcessed = false;
     public static boolean running = false;
 
-    public static final int W = 480;
-    public static final int H = 800;
-    public static final int TIMEOUT = 300;
-    public static float playLeft = 0.020f * W;
-    public static float playRight = 0.022f * W;
-    public static float playTop = 0.24f * H;
-    public static float playBottom = 0.046f * H;
-    public static int playCountW = 6;
-    public static int playCountH = 8;
-    public static float playBoxW = (W - playLeft - playRight) / (float)playCountW;
-    public static float playBoxH = (H - playTop - playBottom) / (float)playCountH;
 
-    private SurfaceView surfaceView = null;
     private MediaProjection mediaProjection = null;
     private VirtualDisplay virtualDisplay = null;
     private MediaProjectionManager mediaProjectionManager = null;
+    private ImageReader captureReader;
+    private Image capturedImage;
 
     public static final int REQUEST_MEDIA_PROJECTION = 333;
 
@@ -93,20 +87,17 @@ public class FilterService extends Service  {
         });
     }
 
-    public void initFromActivity(MediaProjection mediaProjection, VirtualDisplay virtualDisplay, SurfaceView surfaceView) {
-        this.mediaProjection = mediaProjection;
-        this.virtualDisplay = virtualDisplay;
-        this.surfaceView = surfaceView;
+    public void initFromActivity(final int resultCode, final Intent resultData) {
         final Handler handler = new Handler(getMainLooper());
         handler.post(new Runnable() {
             @Override
             public void run() {
-                initDrawOverlay();
+                initDrawOverlay(resultCode, resultData);
             }
         });
     }
 
-    private void initDrawOverlay() {
+    private void initDrawOverlay(final int resultCode, final Intent resultData) {
 
         Log.i(LOG, "initDrawOverlay");
         DisplayMetrics metrics = new DisplayMetrics();
@@ -114,7 +105,7 @@ public class FilterService extends Service  {
 
         view = new ImageView(this);
 
-        bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_4444);
+        bmp = Bitmap.createBitmap(PlayField.W, PlayField.H, Bitmap.Config.ARGB_4444);
 
         view.setImageBitmap(bmp);
         view.setScaleType(ImageView.ScaleType.FIT_XY);
@@ -134,17 +125,86 @@ public class FilterService extends Service  {
 
         windowManager.addView(view, params);
 
+
+        captureReader = ImageReader.newInstance(PlayField.W, PlayField.H, PixelFormat.RGBA_8888, 2);
+
+        mediaProjectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+
+        Log.i(LOG, "Starting screen capture: width " + captureReader.getWidth() + " height " + captureReader.getHeight() + " density " + metrics.densityDpi);
+
+        mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, resultData);
+        virtualDisplay = mediaProjection.createVirtualDisplay("ScreenCapture",
+                captureReader.getWidth(), captureReader.getHeight(), metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                captureReader.getSurface(), null, null);
+
         final Handler handler = new Handler();
+        final Runnable updateScreen = new Runnable() {
+            @Override
+            public void run() {
+                if (destroyed) {
+                    return;
+                }
+                if (PlayField.needCapture) {
+                    if (capturedImage != null) {
+                        capturedImage.close();
+                    }
+                    capturedImage = captureReader.acquireLatestImage();
+                    if (capturedImage == null) {
+                        Log.d(LOG, "Capture is null, skipped frame!");
+                        return;
+                    }
+                }
+                PlayField.updatePattern(bmp, draw, capturedImage);
+                view.invalidate();
+            }
+        };
+        new Thread(new Runnable() {
+            public void run() {
+                boolean needCapture;
+                while (!destroyed) {
+                    needCapture = PlayField.needCapture;
+                    handler.post(updateScreen);
+                    try {
+                        Thread.sleep(PlayField.needCapture ? PlayField.TIMEOUT: PlayField.TIMEOUT / 2);
+                    } catch (Exception e) {
+                    }
+                }
+            }
+        }).start();
+
+        /*
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                updatePattern();
-                view.invalidate();
-                if (!destroyed) {
-                    handler.postDelayed(this, TIMEOUT);
+                if (destroyed) {
+                    return;
                 }
+                long delta = SystemClock.uptimeMillis();
+                if (PlayField.needCapture) {
+                    if (capturedImage != null) {
+                        capturedImage.close();
+                    }
+                    capturedImage = captureReader.acquireLatestImage();
+                    if (capturedImage == null) {
+                        Log.d(LOG, "Capture is null, skipped frame!");
+                        handler.postDelayed(this, 30);
+                        return;
+                    }
+                }
+                PlayField.updatePattern(bmp, draw, capturedImage);
+                view.invalidate();
+                delta = SystemClock.uptimeMillis() - delta;
+                if (delta > PlayField.TIMEOUT) {
+                    delta = PlayField.TIMEOUT - 10;
+                }
+                if (!PlayField.needCapture) {
+                    delta = 0;
+                }
+                handler.postDelayed(this, PlayField.TIMEOUT - delta);
             }
-        }, TIMEOUT);
+        }, PlayField.TIMEOUT);
+        */
     }
 
     @Override
@@ -167,6 +227,7 @@ public class FilterService extends Service  {
     public void onDestroy() {
         super.onDestroy();
         destroyed = true;
+        System.exit(0); // Just kill the process
         if (view != null) {
             windowManager.removeView(view);
         }
@@ -179,53 +240,16 @@ public class FilterService extends Service  {
             mediaProjection.stop();
             mediaProjection = null;
         }
-        surfaceView = null;
-        MainActivity.instance.runOnUiThread(new Runnable() {
-            public void run() {
-                MainActivity.instance.finish();
-            }
-        });
+        if (capturedImage != null) {
+            capturedImage.close();
+            capturedImage = null;
+        }
+        if (captureReader != null) {
+            captureReader.close();
+            captureReader = null;
+        }
         Log.d(LOG, "Service stopped");
         running = false;
     }
 
-    private int logoTicks = 6;
-
-    void updatePattern() {
-        if (logoTicks > 0) {
-            logoTicks--;
-            updatePatternShowLogo();
-        } else {
-            updatePatternShowArrows();
-        }
-    }
-
-    private static Paint textPaint = new Paint();
-    static {
-        textPaint.setTextSize(30);
-        textPaint.setTextAlign(Paint.Align.CENTER);
-        textPaint.setColor(Color.YELLOW);
-    }
-    void updatePatternShowLogo() {
-        bmp.eraseColor(Color.TRANSPARENT);
-        if (logoTicks % 2 == 0) {
-            draw.drawText("Bot is active", W / 2, H / 8, textPaint);
-        }
-    }
-
-    private static Paint yellow = new Paint();
-    static {
-        yellow.setColor(Color.YELLOW);
-        yellow.setTextSize(12);
-        yellow.setTextAlign(Paint.Align.CENTER);
-    }
-    void updatePatternShowArrows() {
-        bmp.eraseColor(Color.TRANSPARENT);
-        for (int x = 0; x < playBoxW; x++) {
-            draw.drawLine(playLeft + x * playBoxW, playTop, playLeft + x * playBoxW, H - playBottom, yellow);
-        }
-        for (int y = 0; y < playBoxH; y++) {
-            draw.drawLine(playLeft, playTop + y * playBoxH, W - playRight, playTop + y * playBoxH, yellow);
-        }
-    }
 }
