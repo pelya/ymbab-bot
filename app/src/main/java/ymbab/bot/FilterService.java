@@ -24,9 +24,7 @@ import android.media.Image;
 import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.SystemClock;
+import android.os.*;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Surface;
@@ -125,8 +123,8 @@ public class FilterService extends Service  {
 
         windowManager.addView(view, params);
 
-
-        captureReader = ImageReader.newInstance(PlayField.W, PlayField.H, PixelFormat.RGBA_8888, 2);
+        PlayField.aspectRatioCorrectionX =  (float)PlayField.H / metrics.heightPixels * metrics.widthPixels / PlayField.W;
+        captureReader = ImageReader.newInstance((int)(PlayField.W * PlayField.aspectRatioCorrectionX), PlayField.H, PixelFormat.RGBA_8888, 2);
 
         mediaProjectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
 
@@ -138,6 +136,7 @@ public class FilterService extends Service  {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 captureReader.getSurface(), null, null);
 
+        /*
         final Handler handler = new Handler();
         final Runnable updateScreen = new Runnable() {
             @Override
@@ -159,19 +158,34 @@ public class FilterService extends Service  {
                 view.invalidate();
             }
         };
-        new Thread(new Runnable() {
+        */
+        Thread t = new Thread(new Runnable() {
             public void run() {
-                boolean needCapture;
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND);
                 while (!destroyed) {
-                    needCapture = PlayField.needCapture;
-                    handler.post(updateScreen);
+                    if (PlayField.needCapture) {
+                        if (capturedImage != null) {
+                            capturedImage.close();
+                        }
+                        capturedImage = captureReader.acquireLatestImage();
+                        if (capturedImage == null) {
+                            Log.d(LOG, "Capture is null, skipped frame!");
+                            return;
+                        }
+                    }
+                    PlayField.updatePlayField(bmp, draw, capturedImage);
+                    view.postInvalidate();
+                    //handler.post(updateScreen);
                     try {
-                        Thread.sleep(PlayField.needCapture ? PlayField.TIMEOUT: PlayField.TIMEOUT / 2);
+                        Thread.sleep(PlayField.needCapture ? PlayField.TIMEOUT / 2: PlayField.TIMEOUT);
+                        //Thread.sleep(PlayField.TIMEOUT);
                     } catch (Exception e) {
                     }
                 }
             }
-        }).start();
+        });
+        t.setPriority(Thread.MAX_PRIORITY);
+        t.start();
 
         /*
         handler.postDelayed(new Runnable() {
