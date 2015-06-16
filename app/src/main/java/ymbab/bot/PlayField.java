@@ -15,7 +15,7 @@ public class PlayField {
     public static final int W = 480;
     public static final int H = 800;
 
-    public static final int TIMEOUT = 1000;
+    public static final int TIMEOUT = 700;
 
     // Borders of the playing field
     public static final float playLeft = 0.020f * W;
@@ -34,11 +34,6 @@ public class PlayField {
     // Minimum 3 tiles will match
     public static final int tileGroupSize = 3;
 
-    public static int grid[][] = new int[tileCountH][tileCountW];
-    public static int match[][] = new int[tileCountH][tileCountW];
-    //public static int matches[tileCountH * tileCountW * 2][tileCountH][tileCountW];
-    //public static int matchesRank[] = new int[tileCountH * tileCountW * 2];
-    //public static int matchesRankSorted[tileCountH * tileCountW * 2];
     public static float aspectRatioCorrectionX = 1.0f;
 
     public static boolean needCapture = false;
@@ -98,13 +93,15 @@ public class PlayField {
                 return;
             }
             int sum = findTiles(draw, capture);
-            if (sum < tileCountH * tileCountW * 5) {
+            if (sum < tileCountH * tileCountW * 4) {
                 showLogo(bmp, draw);
             } else {
                 calculateMatches(draw);
             }
         }
     }
+
+    public static int grid[][] = new int[tileCountH][tileCountW];
 
     private static int findTiles(Canvas draw, Image capture) {
         int sum = 0;
@@ -117,7 +114,19 @@ public class PlayField {
         return sum;
     }
 
+    public static int match[][] = new int[tileCountH][tileCountW];
+    public static int matchesDrawn[][] = new int[tileCountH][tileCountW];
+    public static final int UP = 0x01000000, DOWN = 0x02000000, LEFT = 0x04000000, RIGHT = 0x08000000;
+
     private static void calculateMatches(Canvas draw) {
+
+        for (int y = 0; y < tileCountH; y++) {
+            for (int x = 0; x < tileCountW; x++) {
+                matchesDrawn[y][x] = 0;
+            }
+        }
+
+        // Shift lines horizontally
         for (int y = 0; y < tileCountH; y++) {
             System.arraycopy(grid[y], 0, match[y], 0, tileCountW);
         }
@@ -125,24 +134,185 @@ public class PlayField {
             for (int x = 1; x < tileCountW; x++) {
                 System.arraycopy(grid[y], 0, match[y], x, tileCountW - x);
                 System.arraycopy(grid[y], tileCountW - x, match[y], 0, x);
-                showMatches(draw, x, y);
+                // TODO: sort matches, draw only biggest match, but draw arrows for both directions
+                showMatchesVertical(draw, match, x, y);
+            }
+            System.arraycopy(grid[y], 0, match[y], 0, tileCountW);
+        }
+
+        // Shift lines vertically
+        for (int y = 0; y < tileCountH; y++) {
+            System.arraycopy(grid[y], 0, match[y], 0, tileCountW);
+        }
+        for (int x = 0; x < tileCountW; x++) {
+            for (int y = 1; y < tileCountH; y++) {
+                for (int c = 0; c < tileCountH - y; c++) {
+                    match[y + c][x] = grid[c][x];
+                }
+                for (int c = 0; c < y; c++) {
+                    match[c][x] = grid[tileCountH - y + c][x];
+                }
+                // TODO: sort matches, draw only biggest match, but draw arrows for both directions
+                showMatchesHorizontal(draw, match, x, y);
+            }
+            for (int y = 0; y < tileCountH; y++) {
+                System.arraycopy(grid[y], 0, match[y], 0, tileCountW);
             }
         }
     }
 
-    private static void showMatches(Canvas draw, int shiftX, int shiftY) {
+    private static int showMatchesVertical(Canvas draw, int match[][], int matchX, int matchY) {
         int group = 0;
         int count = 0;
+        int matchesSum = 0;
+
         for (int x = 0; x < tileCountW; x++) {
             group = 0;
             count = 0;
             for (int y = 0; y < tileCountH; y++) {
                 if (group == match[y][x]) {
                     count++;
+                } else {
+                    if (count >= tileGroupSize) {
+                        matchesSum += count;
+                        drawTileArrowsHorizontal(draw, x - matchX, matchY, matchX);
+                    }
+                    group = match[y][x];
+                    count = 1;
                 }
-                group = match[y][x];
+            }
+            if (count >= tileGroupSize) {
+                matchesSum += count;
+                drawTileArrowsHorizontal(draw, x - matchX, matchY, matchX);
+            }
+        }
+        // Check for a group on the line we're shifting, snap to border
+        group = match[matchY][0];
+        count = 1;
+        for (int x = 1; x < tileGroupSize; x++) {
+            if (group == match[matchY][x]) {
+                count++;
+            }
+        }
+        if (count == tileGroupSize && group != match[matchY][tileCountW - 1]) {
+            drawTileArrowsHorizontal(draw, tileCountW - matchX, matchY, matchX);
+        }
 
+        return matchesSum;
+    }
+
+    private static void drawTileArrowsHorizontal(Canvas draw, int x, int y, int arrowCount) {
+        if (x < 0) {
+            x += tileCountW;
+        }
+        if (x >= tileCountW) {
+            x -= tileCountW;
+        }
+        boolean arrowsPointLeft = false;
+        if (arrowCount > tileCountW / 2) {
+            arrowCount = tileCountW - arrowCount;
+            arrowsPointLeft = true;
+            if ((matchesDrawn[y][x] & LEFT) != 0) {
+                return;
+            }
+            matchesDrawn[y][x] |= LEFT;
+        } else {
+            if ((matchesDrawn[y][x] & RIGHT) != 0) {
+                return;
+            }
+            matchesDrawn[y][x] |= RIGHT;
+        }
+        float arrowStep = tileBoxH / (tileCountH * 1.2f);
+        float arrowShift = arrowStep * arrowCount / 2 - ((arrowCount % 2 == 1) ? 0 : arrowStep / 2);
+        for (int a = 0; a < arrowCount; a++) {
+            float drawY = playTop + tileBoxH * (y + 0.5f) - arrowShift + a * arrowStep;
+            if (arrowsPointLeft) {
+                draw.drawLine(playLeft + tileBoxW * (x + 0.1f), drawY, playLeft + tileBoxW * (x + 0.3f), drawY, yellow);
+                draw.drawLine(playLeft + tileBoxW * (x + 0.1f), drawY, playLeft + tileBoxW * (x + 0.2f), drawY - tileBoxH * 0.05f, yellow);
+                draw.drawLine(playLeft + tileBoxW * (x + 0.1f), drawY, playLeft + tileBoxW * (x + 0.2f), drawY + tileBoxH * 0.05f, yellow);
+            } else {
+                draw.drawLine(playLeft + tileBoxW * (x + 0.9f), drawY, playLeft + tileBoxW * (x + 0.7f), drawY, yellow);
+                draw.drawLine(playLeft + tileBoxW * (x + 0.9f), drawY, playLeft + tileBoxW * (x + 0.8f), drawY - tileBoxH * 0.05f, yellow);
+                draw.drawLine(playLeft + tileBoxW * (x + 0.9f), drawY, playLeft + tileBoxW * (x + 0.8f), drawY + tileBoxH * 0.05f, yellow);
             }
         }
     }
+
+    private static int showMatchesHorizontal(Canvas draw, int match[][], int matchX, int matchY) {
+        int group = 0;
+        int count = 0;
+        int matchesSum = 0;
+
+        for (int y = 0; y < tileCountH; y++) {
+            group = 0;
+            count = 0;
+            for (int x = 0; x < tileCountW; x++) {
+                if (group == match[y][x]) {
+                    count++;
+                } else {
+                    if (count >= tileGroupSize) {
+                        matchesSum += count;
+                        drawTileArrowsVertical(draw, matchX, y - matchY, matchY);
+                    }
+                    group = match[y][x];
+                    count = 1;
+                }
+            }
+            if (count >= tileGroupSize) {
+                matchesSum += count;
+                drawTileArrowsVertical(draw, matchX, y - matchY, matchY);
+            }
+        }
+        // Check for a group on the line we're shifting, snap to border
+        group = match[0][matchX];
+        count = 1;
+        for (int y = 1; y < tileGroupSize; y++) {
+            if (group == match[y][matchX]) {
+                count++;
+            }
+        }
+        if (count == tileGroupSize && group != match[tileCountH - 1][matchX]) {
+            drawTileArrowsVertical(draw, matchX, tileCountH - matchY, matchY);
+        }
+
+        return matchesSum;
+    }
+
+    private static void drawTileArrowsVertical(Canvas draw, int x, int y, int arrowCount) {
+        if (y < 0) {
+            y += tileCountH;
+        }
+        if (y >= tileCountH) {
+            y -= tileCountH;
+        }
+        boolean arrowsPointUp = false;
+        if (arrowCount > tileCountH / 2) {
+            arrowCount = tileCountH - arrowCount;
+            arrowsPointUp = true;
+            if ((matchesDrawn[y][x] & UP) != 0) {
+                return;
+            }
+            matchesDrawn[y][x] |= UP;
+        } else {
+            if ((matchesDrawn[y][x] & DOWN) != 0) {
+                return;
+            }
+            matchesDrawn[y][x] |= DOWN;
+        }
+        float arrowStep = tileBoxW / (tileCountW * 1.2f);
+        float arrowShift = arrowStep * arrowCount / 2 - ((arrowCount % 2 == 1) ? 0 : arrowStep / 2);
+        for (int a = 0; a < arrowCount; a++) {
+            float drawX = playLeft + tileBoxW * (x + 0.5f) - arrowShift + a * arrowStep;
+            if (arrowsPointUp) {
+                draw.drawLine(drawX, playTop + tileBoxH * (y + 0.1f), drawX, playTop + tileBoxH * (y + 0.3f), yellow);
+                draw.drawLine(drawX, playTop + tileBoxH * (y + 0.1f), drawX - tileBoxW * 0.05f, playTop + tileBoxH * (y + 0.2f), yellow);
+                draw.drawLine(drawX, playTop + tileBoxH * (y + 0.1f), drawX + tileBoxW * 0.05f, playTop + tileBoxH * (y + 0.2f), yellow);
+            } else {
+                draw.drawLine(drawX, playTop + tileBoxH * (y + 0.9f), drawX, playTop + tileBoxH * (y + 0.7f), yellow);
+                draw.drawLine(drawX, playTop + tileBoxH * (y + 0.9f), drawX - tileBoxW * 0.05f, playTop + tileBoxH * (y + 0.8f), yellow);
+                draw.drawLine(drawX, playTop + tileBoxH * (y + 0.9f), drawX + tileBoxW * 0.05f, playTop + tileBoxH * (y + 0.8f), yellow);
+            }
+        }
+    }
+
 }
