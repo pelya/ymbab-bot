@@ -177,7 +177,7 @@ public class FilterService extends Service  {
                     view.postInvalidate();
                     //handler.post(updateScreen);
                     try {
-                        Thread.sleep(PlayField.needCapture ? PlayField.TIMEOUT / 2: PlayField.TIMEOUT);
+                        Thread.sleep(PlayField.needCapture ? 60 : PlayField.TIMEOUT);
                         //Thread.sleep(PlayField.TIMEOUT);
                     } catch (Exception e) {
                     }
